@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  runtime:
+    build: .
+    container_name: eoh-runtime
+    volumes:
+      - ./data:/data
+      - ./logs:/var/log/eoh
+    environment:
+      - EOH_LEDGER=/data/earn_or_halt.db
+      - EOH_LOG_LEVEL=INFO
+      # EOH_POINTER_FILE=/data/release_pointer.json
+      # EOH_RPC_URL=https://eth.llamarpc.com
+      # EOH_COIN_ADDRESS=0x...
+    restart: unless-stopped

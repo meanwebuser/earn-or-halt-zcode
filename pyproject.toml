@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "earn-or-halt"
+version = "3.0.0"
+description = "Agent Capitalism Protocol — resilient code, mortal economics."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "meanwebuser" }]
+keywords = ["agents", "autonomous", "economic", "ethereum", "ipfs"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Distributed Computing",
+]
+
+dependencies = [
+    # Core has zero external runtime dependencies.
+    # web3 is optional (only needed for on-chain coin integration).
+]
+
+[project.optional-dependencies]
+web3 = ["web3>=6.0,<7.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+all = ["earn-or-halt[web3,dev]"]
+
+[project.scripts]
+earn-or-halt = "earn_or_halt.runtime:main"
+
+[tool.setuptools]
+packages = [
+    "earn_or_halt",
+    "earn_or_halt.providers",
+    "earn_or_halt.receipts",
+    "earn_or_halt.selection",
+    "earn_or_halt.resurrection",
+    "earn_or_halt.coin",
+]
+
+[tool.setuptools.package-data]
+"earn_or_halt.coin" = ["erc20_abi.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]  # handled by line-length

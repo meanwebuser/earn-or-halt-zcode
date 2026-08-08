@@ -1,0 +1,43 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Project data
+earn_or_halt.db
+*.db
+data/
+logs/
+
+# Release signing material (NEVER commit)
+release_privkey.bin
+release_privkey.pem
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
