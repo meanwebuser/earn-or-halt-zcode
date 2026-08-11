@@ -1,25 +1,57 @@
 # Verification status
 
-Reference package verification performed in the build environment:
+Проверка выполнена на свежем shallow clone main в nested package
+arena-v0.2.0.
 
-```text
+## Выполнено
+
+~~~
 python3 -m unittest discover -s tests -v
-42 tests passed
-
-python3 -m compileall -q model scripts tests
-passed
+Ran 64 tests ... OK
 
 sh -n scripts/compile.sh
-passed
+OK
+~~~
 
-python3 scripts/demo.py
-complete selection cycle and token-conservation invariant passed
-```
+Набор состоит из 42 базовых arena tests и 22 tests в
+tests/test_v02_hardening.py. В базовой части проверяются ranked/market split,
+proof replay, runtime heartbeat, supersede, stale/vacancy и token
+conservation. В hardening части отдельно проверяются:
 
-The tests cover the executable Python state model, Ethereum-compatible Keccak and Merkle tooling, source-manifest determinism, Solidity import resolution, delimiter balance, pinned compiler identity, and static absence of owner/withdraw/halt/upgrade escape hatches.
+- U1 bond funding/reclaim;
+- U2 daily cap и multi-sig;
+- U3 commit/reveal;
+- U4 verifier-set validation;
+- U5 IPFS proof tracking;
+- U6 objective market auto-accept;
+- U8 median profit;
+- U9 stale capital split;
+- U10 heartbeat burn.
 
-## Important limitation
+## Claim audit
 
-The Solidity contracts were **not compiled inside this artifact-building environment** because the pinned compiler binary could not be downloaded there. `scripts/compile.sh` and GitHub Actions CI pin official `solc 0.8.36+commit.8a079791` and verify SHA-256 before compilation, but a successful CI compile is still required before treating the Solidity source as build-verified.
+Тесты hardening относятся к Python model/arena.py. Solidity
+contracts/EohArena.sol содержит additive fields/entrypoints, но не все
+hardening правила подключены к базовым transitions:
 
-No security audit, fuzz campaign, symbolic execution, formal proof, testnet deployment, or mainnet deployment has been performed. Demo verifiers are explicitly insecure and must not be used with value.
+- registerVersion не собирает VERSION_BOND;
+- settleOperatingExpense не применяет DAILY_EXPENSE_CAP или signer threshold;
+- heartbeat не принимает ipfs proof и не списывает heartbeat burn;
+- createRankedJob использует один verifier, а verifierSet не заполняется;
+- openMarketJob не принимает work_verifier_id;
+- ejectStale не выполняет lineage half-split;
+- allowedSettlementTokens не участвует в transfer validation;
+- legacy supersede остаётся single-epoch path.
+
+Поэтому корректная claim boundary: 64 green Python/static tests и additive
+reference surface, но не полностью hardened Solidity deployment.
+
+## Compile and deployment limits
+
+scripts/compile.sh pin'ит solc 0.8.36+commit.8a079791 и проверяет checksum.
+В текущем окружении solc отсутствовал, поэтому compiler script не запускался
+для генерации artifacts; shell syntax проверен отдельно.
+
+Не выполнены security audit, fuzzing, symbolic/formal verification,
+testnet/mainnet deployment, live token transaction или production verifier
+canary. До этих gates nested arena нельзя использовать с реальными деньгами.

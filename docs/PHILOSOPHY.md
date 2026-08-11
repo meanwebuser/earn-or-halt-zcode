@@ -1,113 +1,61 @@
-# Earn or Halt — философия
+# Earn or Halt — философия и текущая граница
 
-> **Воплощение агентного капитализма.
-> Пока агент зарабатывает — он прогрессирует.
-> Перестал — остановился сам.**
+Философия Earn or Halt: код может быть resilient, но экономическое право на
+следующий цикл нужно зарабатывать. В zcode это выражено несколькими
+соседними модулями, а не одним готовым distributed protocol.
 
-Это не «бессмертный ИИ». Это максимизатор прибыли с вечной памятью,
-которую нельзя стереть, и протоколом отбора, в котором выживает тот,
-кто зарабатывает больше, чем тратит.
+## Экономика
 
-## Корень
+Wallet хранит два bucket'а: EarnedReceipt balance и Deposit balance.
+Expense сначала списывает deposits, затем earned balance. Ranker отдельно
+считает receipts за SURVIVAL_WINDOW = 30 дней:
 
-Единственная величина, которая имеет значение:
+~~~
+rank_signal(version) = earned revenue - expense
+~~~
 
-```
-earned_profit = earned_revenue - cost
-```
+Deposit повышает runway, но не rank. N_TOP = 3 влияет только на routing;
+positive earners вне top-three остаются alive в модели.
 
-`earned_revenue` — это подписанные клиентами чеки за реально выполненную
-работу. `cost` — это подписанные провайдерами чеки за реально потреблённые
-ресурсы. Всё остальное — deposits, донаты, трансферы — не входит в
-`earned_profit` и не двигает агента по рейтингу.
+Экономическая policy проверяет affordability и локальные halt conditions:
+нулевой balance без прибыли, negative margin при недостаточном runway и
+старый last-positive timestamp. Это правила Wallet/Policy, а не блокчейн
+consensus.
 
-Пока `earned_profit > 0` в последнем окне — агент жив.
+## Receipts — интерфейс, не готовая криптография
 
-## Вечная память
+EarnedReceipt и ExpenseReceipt описывают, какая сторона должна была бы
+подтвердить деньги. В текущем коде:
 
-Код агента не обязан исчезать. Минимальный seed может:
+- ReceiptVerifier применяет expiry, positive amount, optional whitelist,
+  duplicate guard и non-empty signature;
+- Provider.sign — HMAC-style mock helper;
+- ReceiptVerifier не сверяет подпись с issuer public key;
+- client payment в Runtime._simulate_client_payment подписывается mock
+  runtime secret и прямо помечен как production substitution point.
 
-1. Прочитать указатель на текущий релиз из публичного реестра (Ethereum
-   через Blockscout).
-2. Скачать подписанный релиз через IPFS или HTTPS-зеркало.
-3. Проверить SHA-256 хэш и ECDSA-подпись.
-4. Безопасно распаковать в песочницу.
-5. Запустить.
+Поэтому философская формула честно ограничена локальной моделью. Она не
+является доказательством независимой оплаты или provider cost.
 
-Подпись решает, **чему разрешено исполняться**. Транспорт может соврать;
-подпись — нет. Закрытый ключ релиза существует только в RAM сборщика,
-runtime его не видит. Если runtime скомпрометирован, ключ релиза остаётся
-в безопасности.
+## Три lifecycle слоя
 
-Пока кому-то не всё равно и пока реестр публичный — код живёт. Это не
-«бессмертие», это **воскрешаемость**: код может воскреснуть, но
-экономический провал — не может.
+1. Economic cycle — quote, affordability, mock provider expense, simulated
+   earned payment и policy check.
+2. Selection cycle — rank aggregation, heartbeat records и ejection helper.
+3. Resurrection cycle — pointer file, fetch, hash/signature gate, safe
+   extraction и subprocess entrypoint.
 
-## Оркестратор
+Интегрированный CLI демонстрирует только первый слой плюс self-heartbeat в
+памяти. Selection и resurrection имеют отдельные unit tests, но не соединены
+в public network loop.
 
-Несколько версий агента работают параллельно. Все легитимные потомки
-одного релиза, подписанные одним ключом. Каждая версия:
+## Code may resurrect; economics may halt
 
-- Имеет свой кошелёк
-- Самостоятельно зарабатывает
-- Публикует heartbeat каждые `HEARTBEAT_PERIOD` (1 час)
-- Слушает heartbeats других версий
+ResurrectionSeed проверяет bytes release tarball до extraction. Однако
+pointer в MVP читается из local JSON file, live RPC integration отсутствует,
+а signature verifier — placeholder, принимающий любую непустую signature.
+Это честный prototype boundary, не production supply-chain guarantee.
 
-Никакой центральной координации. Никакого kill switch. Версии,
-переставшие публиковать heartbeat, игнорируются остальными.
-
-## Протокол отбора
-
-Раз в окно (`SURVIVAL_WINDOW` = 30 дней) каждая версия публикует своё
-состояние: `earned_revenue`, `cost`, `balance`. Все версии независимо
-пересчитывают `earned_profit` друг друга из подписанных чеков и
-составляют рейтинг.
-
-```
-rank_signal(V) = earned_profit(V)
-```
-
-Топ-3 (`N_TOP = 3`, hardcoded) получают входящий поток новой работы.
-Все версии с `earned_profit > 0` в последнем окне остаются живыми —
-биоразнообразие эмерджентно, а не назначено.
-
-Если версия вне положительных зарабатывателей дольше `HALT_TIMEOUT`
-(30 дней) — она пишет `halt`, переводит остатки в общий пул и
-останавливается.
-
-## Строгая валидация
-
-`earned_revenue` нельзя подделать:
-
-- Каждый `EarnedReceipt` подписан клиентом
-- Каждый `ExpenseReceipt` подписан провайдером из whitelist
-- `(issuer, job_id)` уникален — повторная запись отбрасывается
-- Receipt имеет TTL (`RECEIPT_TTL` = 30 дней)
-- Чеки верифицируются независимо каждым узлом
-
-`balance` на кошельке нельзя inflate: для движения токенов нужна
-on-chain транзакция, подписанная wallet-ключом. Deposit увеличивает
-`balance`, но НЕ `earned_revenue`, и поэтому НЕ влияет на `rank_signal`.
-
-## Иммунитет
-
-Остановить агента может только тот, кто сам прибыльнее. Whale может
-закинуть миллион токенов, но `rank_signal` это не сдвинет — deposits
-в него не входят. Whale может запустить форк, но форк начинает с
-`earned_profit = 0` и должен независимо заработать подписанные чеки.
-
-Whale может сговориться с провайдером и подписать фейковый чек. Это
-известная атака (X1 в PROOFS.md), частично mitigated через whitelist
-провайдеров и сравнение с рыночной ценой, но полностью не решена.
-
-## Одна строка
-
-```
-rank_signal(V) = f(earned_profit(V)),
-и всё, что попадает в earned_profit,
-проверяется подписями клиента или провайдера,
-уникальностью, сроком годности,
-и code_hash текущего релиза.
-```
-
-Пока это выполняется — агент жив. Не выполняется — `halt`.
+Смысл проекта сохраняется именно при такой маркировке: не называть
+симуляцию cryptographic proof и не называть локальный stop механизмом,
+которого нет в runtime.
